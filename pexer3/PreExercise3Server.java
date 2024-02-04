@@ -3,35 +3,37 @@ package pexer3;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class PreExercise3Server implements Runnable {
 
     public ServerSocket server;
 
-    BufferedReader reader;
-    PrintWriter writer;
 
     public PreExercise3Server() throws IOException {
         server = new ServerSocket(2000);
     }
 
-    public String read(Socket client) throws IOException {
-        reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-        String nextLine = reader.readLine();
-        reader.close();
+    public static String readFromClient(Socket client) {
+        String nextLine = null;
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
+            nextLine = reader.readLine();
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
         return nextLine;
     }
 
-    public void write(Socket client, String line) throws IOException {
-        writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream()));
-        writer.println(line);
-        writer.close();
+    public static void writeToClient(Socket client, String line) {
+        try {
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream()),true);
+            writer.println(line);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
     }
 
     public ServerSocket getServer() {
@@ -51,63 +53,72 @@ public class PreExercise3Server implements Runnable {
         }
     }
 
-    public static Callable solveExpression(List<String> expression) {
-        return new Callable() {
-            @Override
-            public List<String> call() {
-                double solved;
-                try {
-                    switch (expression.get(1)) {
-                        case "+" -> solved = Double.valueOf(expression.get(0)) + Double.valueOf(expression.get(2));
-                        case "-" -> solved = Double.valueOf(expression.get(0)) - Double.valueOf(expression.get(2));
-                        case "%" -> solved = Double.valueOf(expression.get(0)) % Double.valueOf(expression.get(2));
-                        case "/" -> solved = Double.valueOf(expression.get(0)) / Double.valueOf(expression.get(2));
-                        case "*" -> solved = Double.valueOf(expression.get(0)) * Double.valueOf(expression.get(2));
-                        case "^" -> solved = Math.pow(Double.valueOf(expression.get(0)), Double.valueOf(expression.get(2)));
-                        default -> {
-                            return null;
-                        }
-                    }
-                } catch (NumberFormatException e) {
+    public static String solveExpression(String toSolve) {
+        double solved;
+        String[] expression = toSolve.split(",");
+
+        if (expression.length != 3) {
+            return null; // Return null for invalid expressions
+        }
+
+        try {
+            switch (expression[1]) {
+                case "+" -> solved = Double.valueOf(expression[0]) + Double.valueOf(expression[2]);
+                case "-" -> solved = Double.valueOf(expression[0]) - Double.valueOf(expression[2]);
+                case "%" -> solved = Double.valueOf(expression[0]) % Double.valueOf(expression[2]);
+                case "/" -> solved = Double.valueOf(expression[0]) / Double.valueOf(expression[2]);
+                case "*" -> solved = Double.valueOf(expression[0]) * Double.valueOf(expression[2]);
+                case "^" -> solved = Math.pow(Double.valueOf(expression[0]), Double.valueOf(expression[2]));
+                default -> {
                     return null;
                 }
-                expression.add(String.valueOf(solved));
-                return expression;
             }
-        };
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return expression[0] + " " + expression[1] + " " + expression[2] + " = " + solved;
     }
 
     public static void main(String[] args) {
         ExecutorService executor = Executors.newFixedThreadPool(5);
-
+        int iterator = 0;
         try {
             PreExercise3Server server = new PreExercise3Server();
             while (true) {
                 PreExercise3Client client = new PreExercise3Client(server.getServer());
 
-                // The list of expressions
-                List<List<String>> expressionsList = (List<List<String>>) client.call();
+                // Iterate while there are lines being sent to server
+                do {
 
-                //The list of solved expressions
-                List<List<String>> solvedExpressionsList = new ArrayList<>();
-                ;
+                    client.readLineFromFile();
 
-                // Loop through all the expressions
-                for (List<String> expression : expressionsList) {
 
-                    try {
-                        // Solve all the expressions
-                        List<String> message = (List<String>) solveExpression(expression).call();
-                        server.write(client.getClient(),message.toString());
-                    } catch (Exception ex) {
-                    }
-                    System.out.println("");
+                    // Read the expression
 
-                }
+                    Thread thread1 = new Thread(() -> {
+                        // Read expression from client
+                        String expression = readFromClient(client.getClient());
+
+
+                        // Solve expression from server
+                        String solvedExpression = solveExpression(expression);
+
+
+                        // Write solution to client
+                        writeToClient(client.getClient(), solvedExpression);
+
+                        // Let client read solved solution
+                        client.readFromServer();
+
+                    });
+                    thread1.start();
+
+                    iterator++;
+                } while (iterator != 10);
+
 
             }
 
-            //   System.out.println(expressions.get(0));
         } catch (IOException ex) {
             ex.printStackTrace();
         }

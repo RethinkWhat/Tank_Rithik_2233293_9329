@@ -15,13 +15,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-public class PreExercise3Client implements Callable {
+public class PreExercise3Client implements Runnable{
 
     Socket client;
-    BufferedReader reader;
-    PrintWriter writer;
 
     static int clientID =0;
+
+    int lineRead = 0;
 
 
 
@@ -30,18 +30,21 @@ public class PreExercise3Client implements Callable {
         clientID +=1;
     }
 
-    public String readFromServer() throws IOException {
-        reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-        String nextLine =  reader.readLine();
-        reader.close();
-        return nextLine;
+    public void readFromServer() {
+        String nextLine = null;
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
+            nextLine = reader.readLine();
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+        System.out.println(nextLine);
     }
 
 
-    public void write(String line) throws IOException {
-        writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream()));
+    public void writeToServer(String line) throws IOException {
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream()),true);
         writer.println(line);
-        writer.close();
     }
 
     public Socket getClient() {
@@ -52,8 +55,8 @@ public class PreExercise3Client implements Callable {
         this.client = client;
     }
 
-    public List<List<String>> call() throws IOException {
-        List<List<String>> expressionsList = new ArrayList<>();
+    public void readLineFromFile() throws IOException {
+        List<String> expression = null;
         try {
             DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
             Document document = builder.parse("res/exer3.xml");
@@ -61,20 +64,27 @@ public class PreExercise3Client implements Callable {
 
             NodeList nodeList = document.getElementsByTagName("expression");
 
-            for (int x =0 ; x < nodeList.getLength(); x++ ) {
-                Node first = nodeList.item(x);
-                NodeList children = first.getChildNodes();
-                List<String> expression = new ArrayList<>();
-                for (int y = 0; y< children.getLength(); y++) {
-                    if (children.item(y).getNodeType() == Node.ELEMENT_NODE) {
-                        expression.add(children.item(y).getTextContent());
-                    }
+            Node first = nodeList.item(lineRead);
+            NodeList children = first.getChildNodes();
+            expression = new ArrayList<>();
+            for (int y = 0; y < children.getLength(); y++) {
+                if (children.item(y).getNodeType() == Node.ELEMENT_NODE) {
+                    expression.add(children.item(y).getTextContent());
                 }
-                expressionsList.add(expression);
             }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
-        return expressionsList;
+        lineRead++;
+        String toReturn = "";
+        for (String term: expression) {
+            toReturn += term +",";
+        }
+        writeToServer(toReturn);
+    }
+
+    public void run() {
+            readFromServer();
+
     }
 }
