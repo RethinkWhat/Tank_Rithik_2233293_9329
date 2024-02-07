@@ -7,13 +7,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class PreExercise3Server implements Runnable {
+public class PreExercise3Server {
 
-    public ServerSocket server;
+    private ServerSocket server;
 
 
-    public PreExercise3Server() throws IOException {
-        server = new ServerSocket(2000);
+    public PreExercise3Server(int port) throws IOException {
+        server = new ServerSocket(port);
     }
 
     public static String readFromClient(Socket client) {
@@ -44,15 +44,6 @@ public class PreExercise3Server implements Runnable {
         this.server = server;
     }
 
-    @Override
-    public void run() {
-        try {
-            server = new ServerSocket(2000);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-    }
-
     public static String solveExpression(String toSolve) {
         double solved;
         String[] expression = toSolve.split(",");
@@ -60,6 +51,7 @@ public class PreExercise3Server implements Runnable {
         if (expression.length != 3) {
             return null; // Return null for invalid expressions
         }
+        String error = expression[0] + " " + expression[1] + " " +  expression[2] + " = Invalid Expression";
 
         try {
             switch (expression[1]) {
@@ -70,58 +62,39 @@ public class PreExercise3Server implements Runnable {
                 case "*" -> solved = Double.valueOf(expression[0]) * Double.valueOf(expression[2]);
                 case "^" -> solved = Math.pow(Double.valueOf(expression[0]), Double.valueOf(expression[2]));
                 default -> {
-                    return null;
+                    return  error;
                 }
             }
         } catch (NumberFormatException e) {
-            return null;
+            return error;
         }
         return expression[0] + " " + expression[1] + " " + expression[2] + " = " + solved;
     }
 
     public static void main(String[] args) {
         ExecutorService executor = Executors.newFixedThreadPool(5);
-        int iterator = 0;
-        try {
-            PreExercise3Server server = new PreExercise3Server();
-            while (true) {
-                PreExercise3Client client = new PreExercise3Client(server.getServer());
+        PreExercise3Server server;
+        Socket client = null;
+        String expressionToSolve = "";
 
-                // Iterate while there are lines being sent to server
-                do {
+            try {
+                server = new PreExercise3Server(2020);
 
-                    client.readLineFromFile();
+                while (true) {
+                    client = server.getServer().accept();
+                    new Thread(new PreExercise3Client(client));
 
-
-                    // Read the expression
-
-                    Thread thread1 = new Thread(() -> {
-                        // Read expression from client
-                        String expression = readFromClient(client.getClient());
-
-
-                        // Solve expression from server
-                        String solvedExpression = solveExpression(expression);
-
-
-                        // Write solution to client
-                        writeToClient(client.getClient(), solvedExpression);
-
-                        // Let client read solved solution
-                        client.readFromServer();
-
-                    });
-                    thread1.start();
-
-                    iterator++;
-                } while (iterator != 10);
-
-
+                    while (true) {
+                        expressionToSolve = readFromClient(client);
+                        if (expressionToSolve.equals("done"))
+                            break;
+                        writeToClient(client, solveExpression(expressionToSolve));
+                    }
+                    writeToClient(client, "bye");
+                }
+            } catch (IOException ex) {
+                ex.printStackTrace();
             }
-
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        }
 
     }
 }
